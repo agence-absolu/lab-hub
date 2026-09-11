@@ -2,8 +2,12 @@
 
 Hub des démonstrations techniques publiées sur **lab.agence-absolu.com**.
 
-Un seul fichier, `server.js`, sans dépendance : ni `npm install`, ni build. Il
-liste les démos en ligne sur `/` et sert chacune d'elles sur `/<slug>/`.
+Deux fichiers, sans dépendance : ni `npm install`, ni build.
+
+- `hub.js` — le hub lui-même : liste les démos en ligne sur `/` et sert chacune
+  d'elles sur `/<slug>/` ;
+- `server.js` — l'amorceur : ouvre le port, délègue chaque requête à `hub.js`
+  et le réimporte dès qu'une nouvelle version est déposée sur le disque.
 
 ```bash
 npm start            # http://localhost:3000
@@ -27,7 +31,7 @@ contente de lire :
 de vie : le hub peut être redéployé, nettoyé ou reconstruit sans emporter les
 démos, et son propre code, hors du dossier servi, n'est pas exposé au web.
 
-Règles imposées par `server.js` :
+Règles imposées par `hub.js` :
 
 - un dossier est une démo dès qu'il contient un `index.html` ;
 - le slug est en minuscules : lettres, chiffres, tirets (`/^[a-z0-9][a-z0-9-]*$/`) ;
@@ -46,17 +50,23 @@ Variables d'environnement : `PORT` (défaut `3000`), `LAB_PROJECTS_DIR` (défaut
 
 ## Déployer le hub
 
-`.github/workflows/deploy.yml` envoie `server.js`, `package.json` et ce README par
-rsync sur SSH dans `~/lab.agence-absolu.com/` à chaque push sur `main` (ou à la
-demande, onglet Actions), avec les mêmes quatre secrets que les démos (voir
-plus bas). Sans `--delete` : `lab-projects/` n'est jamais touché.
+`.github/workflows/deploy.yml` envoie `hub.js`, `server.js`, `package.json` et ce
+README par rsync sur SSH dans `~/lab.agence-absolu.com/` à chaque push sur `main`
+(ou à la demande, onglet Actions), avec les mêmes quatre secrets que les démos
+(voir plus bas). Sans `--delete` : `lab-projects/` n'est jamais touché.
 
-Node charge `server.js` au démarrage, le nouveau code ne sert donc qu'après
-redémarrage de l'application. Infomaniak n'a pas d'API publique pour ça (le
-bouton du Manager passe par une API privée) : le workflow tue le processus
-`node server.js` par SSH et attend que le superviseur d'Infomaniak le relance,
-en vérifiant qu'un nouveau PID apparaît. S'il ne revient pas en 60 s, le job
-échoue — redémarrer alors depuis le Manager (site Node.js › tableau de bord).
+**Pas de redémarrage** : `server.js` sonde `hub.js` toutes les deux secondes et
+le réimporte dès que rsync en dépose une nouvelle version — le nouveau code
+sert dans les secondes qui suivent le push. Si la nouvelle version ne se charge
+pas (erreur de syntaxe…), l'ancienne continue de servir et l'erreur est dans la
+console du site.
+
+C'est la seule voie possible chez Infomaniak : il n'existe pas d'API publique
+pour redémarrer un site Node.js, et le shell SSH vit dans un conteneur à part,
+sans vue sur le processus de l'application — impossible de le tuer pour le
+faire relancer. Corollaire : **une modification de `server.js` exige encore un
+redémarrage manuel** depuis le Manager (site Node.js › tableau de bord). Il est
+fait pour ne plus changer.
 
 ## Ajouter une démo
 

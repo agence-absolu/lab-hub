@@ -5,12 +5,11 @@
 #
 #  1. On n'envoie que les fichiers du hub, sans --delete : lab-projects/ (les
 #     démos) vit dans le même dossier et ne doit jamais être touché.
-#  2. Node charge server.js au démarrage : le nouveau code ne sert à rien tant
-#     que l'application n'a pas redémarré. Infomaniak n'offre pas d'API publique
-#     pour ça (le bouton du Manager passe par une API privée), on tue donc le
-#     processus par SSH et on laisse le superviseur d'Infomaniak le relancer.
-#     Le job vérifie qu'un nouveau PID est apparu ; sinon il échoue et il faut
-#     redémarrer depuis le Manager (tableau de bord du site Node.js).
+#  2. Aucun redémarrage : server.js réimporte hub.js dès qu'une nouvelle
+#     version est déposée. Infomaniak n'offre aucun moyen de redémarrer
+#     l'application hors du Manager (pas d'API publique, et le shell SSH vit
+#     dans un conteneur à part, sans vue sur le processus). Seule une
+#     modification de server.js exige encore un redémarrage manuel.
 #
 # Secrets à créer (Settings › Secrets and variables › Actions) :
 #   LAB_SSH_HOST         hôte SSH (…ssh.hosting-ik.com)
@@ -62,40 +61,4 @@ jobs:
           sshpass -e ssh "$USER_SSH@$HOST" "mkdir -p '$TARGET'"
           # Liste explicite, pas de --delete : rien d'autre dans ce dossier
           # (lab-projects/ en tête) ne doit être touché.
-          sshpass -e rsync -az server.js package.json README.md "$USER_SSH@$HOST:$TARGET/"
-
-      - name: Redémarrer l'application
-        env:
-          SSHPASS: ${{ secrets.LAB_SSH_PASSWORD }}
-          HOST: ${{ secrets.LAB_SSH_HOST }}
-          USER_SSH: ${{ secrets.LAB_SSH_USER }}
-          # Le motif cible le node du hub, pas le npm qui l'a lancé : npm se
-          # termine avec son enfant, et le superviseur relance la commande de
-          # démarrage. Les crochets évitent que pgrep se trouve lui-même.
-          PATTERN: '[n]ode .*server\.js'
-        run: |
-          remote() { sshpass -e ssh -o ConnectTimeout=15 "$USER_SSH@$HOST" "$@"; }
-
-          echo '::group::Processus avant'
-          remote "pgrep -af '$PATTERN'" || echo "(aucun — l'application est arrêtée ou lancée autrement)"
-          echo '::endgroup::'
-          OLD=$(remote "pgrep -f '$PATTERN'" | sort | tr '\n' ' ' || true)
-
-          # Le shell SSH vit dans le conteneur de l'application : si le
-          # superviseur relance le conteneur, la connexion tombe (ssh sort en
-          # 255). On ne conclut donc rien ici, la vérification suit dans des
-          # connexions neuves.
-          remote "pkill -f '$PATTERN'" || echo "pkill : sortie $? (connexion coupée ou rien à tuer)"
-
-          for i in $(seq 1 12); do
-            sleep 5
-            NEW=$(remote "pgrep -f '$PATTERN'" 2>/dev/null | sort | tr '\n' ' ' || true)
-            echo "$((i * 5)) s : PID [$NEW]"
-            if [ -n "$NEW" ] && [ "$NEW" != "$OLD" ]; then
-              echo "Redémarré : PID $NEW (avant : $OLD)"
-              exit 0
-            fi
-          done
-
-          echo "::error::L'application n'est pas revenue en 60 s. Redémarrer depuis le Manager Infomaniak (site Node.js › tableau de bord)."
-          exit 1
+          sshpass -e rsync -az hub.js server.js package.json README.md "$USER_SSH@$HOST:$TARGET/"

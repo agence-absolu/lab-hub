@@ -1,8 +1,10 @@
 # lab-hub
 
-Hub provisoire du lab : un serveur Node sans dépendance (`server.js`) qui expose
+Hub provisoire du lab : un serveur Node sans dépendance qui expose
 les démos déposées dans `lab-projects/<slug>/` sur `/<slug>/`. Pas de `npm install`,
-pas de build. Lancer avec `npm start`.
+pas de build. Lancer avec `npm start`. `server.js` est un amorceur qui recharge
+`hub.js` à chaud (Infomaniak ne permet pas de redémarrer l'application autrement
+que depuis le Manager) : le code du hub va dans `hub.js`, `server.js` ne change pas.
 
 ## Langue
 
