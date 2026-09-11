@@ -69,29 +69,33 @@ jobs:
           SSHPASS: ${{ secrets.LAB_SSH_PASSWORD }}
           HOST: ${{ secrets.LAB_SSH_HOST }}
           USER_SSH: ${{ secrets.LAB_SSH_USER }}
+          # Le motif cible le node du hub, pas le npm qui l'a lancé : npm se
+          # termine avec son enfant, et le superviseur relance la commande de
+          # démarrage. Les crochets évitent que pgrep se trouve lui-même.
+          PATTERN: '[n]ode .*server\.js'
         run: |
-          sshpass -e ssh "$USER_SSH@$HOST" 'bash -s' <<'REMOTE'
-            set -u
-            # Le motif cible le node du hub, pas le npm qui l'a lancé : npm se
-            # termine avec son enfant, et le superviseur relance la commande de
-            # démarrage. Les crochets évitent que pgrep se trouve lui-même.
-            PATTERN='[n]ode .*server\.js'
+          remote() { sshpass -e ssh -o ConnectTimeout=15 "$USER_SSH@$HOST" "$@"; }
 
-            echo "Processus avant :"
-            pgrep -af "$PATTERN" || echo "(aucun — l'application est arrêtée ou lancée autrement)"
+          echo '::group::Processus avant'
+          remote "pgrep -af '$PATTERN'" || echo "(aucun — l'application est arrêtée ou lancée autrement)"
+          echo '::endgroup::'
+          OLD=$(remote "pgrep -f '$PATTERN'" | sort | tr '\n' ' ' || true)
 
-            OLD=$(pgrep -f "$PATTERN" | sort | tr '\n' ' ')
-            pkill -f "$PATTERN" || true
+          # Le shell SSH vit dans le conteneur de l'application : si le
+          # superviseur relance le conteneur, la connexion tombe (ssh sort en
+          # 255). On ne conclut donc rien ici, la vérification suit dans des
+          # connexions neuves.
+          remote "pkill -f '$PATTERN'" || echo "pkill : sortie $? (connexion coupée ou rien à tuer)"
 
-            for i in $(seq 1 12); do
-              sleep 5
-              NEW=$(pgrep -f "$PATTERN" | sort | tr '\n' ' ')
-              if [ -n "$NEW" ] && [ "$NEW" != "$OLD" ]; then
-                echo "Redémarré : PID $NEW"
-                exit 0
-              fi
-            done
+          for i in $(seq 1 12); do
+            sleep 5
+            NEW=$(remote "pgrep -f '$PATTERN'" 2>/dev/null | sort | tr '\n' ' ' || true)
+            echo "$((i * 5)) s : PID [$NEW]"
+            if [ -n "$NEW" ] && [ "$NEW" != "$OLD" ]; then
+              echo "Redémarré : PID $NEW (avant : $OLD)"
+              exit 0
+            fi
+          done
 
-            echo "::error::L'application n'est pas revenue en 60 s. Redémarrer depuis le Manager Infomaniak (site Node.js › tableau de bord)."
-            exit 1
-          REMOTE
+          echo "::error::L'application n'est pas revenue en 60 s. Redémarrer depuis le Manager Infomaniak (site Node.js › tableau de bord)."
+          exit 1
