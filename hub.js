@@ -66,7 +66,7 @@ async function home(res) {
   const page = `<!doctype html>
 <html lang="fr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Lab — Agence Absolu</title>
+<title>Absolu Lab</title>
 <style>
   body{font:16px/1.6 system-ui,sans-serif;margin:0;padding:3rem 1.5rem;color:#111}
   main{max-width:34rem;margin:0 auto}
@@ -81,7 +81,7 @@ async function home(res) {
     p{color:#999}li{border-color:#2a2a2a}
   }
 </style></head>
-<body><main><h1>Lab</h1><p>Démonstrations techniques.</p><ul>${items}</ul></main></body></html>`;
+<body><main><h1>Absolu Lab</h1><p>Démonstrations techniques.</p><ul>${items}</ul></main></body></html>`;
 
   res.writeHead(200, {
     'Content-Type': 'text/html; charset=utf-8',
