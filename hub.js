@@ -44,6 +44,22 @@ async function statOrNull(file) {
 }
 
 // --- La page d'accueil : ce qui est en ligne ---------------------------------
+// La date d'un projet est celle de son fichier le plus récent : la date du
+// dossier lui-même ne bouge qu'à l'ajout ou au retrait d'une entrée, pas quand
+// un fichier est réécrit par un déploiement.
+async function lastModified(dir) {
+  const entries = await readdir(dir, { withFileTypes: true, recursive: true }).catch(() => []);
+  let latest = 0;
+
+  for (const entry of entries) {
+    if (!entry.isFile() || entry.name.startsWith('.')) continue;
+    const info = await statOrNull(path.join(entry.parentPath, entry.name));
+    if (info && info.mtimeMs > latest) latest = info.mtimeMs;
+  }
+
+  return latest ? new Date(latest) : null;
+}
+
 async function listProjects() {
   // Le dossier peut ne pas exister encore : un lab vide n'est pas une erreur.
   const entries = await readdir(PROJECTS, { withFileTypes: true }).catch(() => []);
@@ -51,16 +67,28 @@ async function listProjects() {
 
   for (const entry of entries) {
     if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
-    if (await statOrNull(path.join(PROJECTS, entry.name, 'index.html'))) projects.push(entry.name);
+    const dir = path.join(PROJECTS, entry.name);
+    if (!(await statOrNull(path.join(dir, 'index.html')))) continue;
+    projects.push({ slug: entry.name, modified: await lastModified(dir) });
   }
 
-  return projects.sort();
+  // Le plus récent en tête ; un projet sans date passe en fin, à égalité par slug.
+  return projects.sort(
+    (a, b) => (b.modified?.getTime() ?? 0) - (a.modified?.getTime() ?? 0) || a.slug.localeCompare(b.slug),
+  );
 }
+
+const formatDate = (date) => date.toLocaleDateString('fr-FR', { timeZone: 'Europe/Paris' });
 
 async function home(res) {
   const projects = await listProjects();
   const items = projects.length
-    ? projects.map((d) => `<li><a href="/${d}/">${d}</a></li>`).join('')
+    ? projects
+        .map(({ slug, modified }) => {
+          const date = modified ? ` <span>(${formatDate(modified)})</span>` : '';
+          return `<li><a href="/${slug}/">${slug}</a>${date}</li>`;
+        })
+        .join('')
     : '<li>Aucune démo publiée pour l’instant.</li>';
 
   const page = `<!doctype html>
@@ -76,9 +104,10 @@ async function home(res) {
   li{border-top:1px solid #e5e5e5;padding:.85rem 0}
   a{color:#111;text-decoration:none}
   a:hover{text-decoration:underline}
+  li span{color:#666;font-size:.9em}
   @media (prefers-color-scheme:dark){
     body{background:#111;color:#f5f5f5}a{color:#f5f5f5}
-    p{color:#999}li{border-color:#2a2a2a}
+    p{color:#999}li{border-color:#2a2a2a}li span{color:#999}
   }
 </style></head>
 <body><main><h1>Absolu Lab</h1><p>Démonstrations techniques.</p><ul>${items}</ul></main></body></html>`;
