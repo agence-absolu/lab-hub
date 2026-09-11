@@ -1,0 +1,15 @@
+{# Gabarit commun à toutes les pages du hub. #}
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{% block title %}Absolu Lab{% endblock %}</title>
+  <link rel="stylesheet" href="/_hub/hub.css">
+</head>
+<body>
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

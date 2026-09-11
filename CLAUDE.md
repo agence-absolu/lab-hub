@@ -1,8 +1,10 @@
 # lab-hub
 
-Hub provisoire du lab : un serveur Node sans dépendance qui expose
+Hub provisoire du lab : un serveur Node sans dépendance à installer qui expose
 les démos déposées dans `lab-projects/<slug>/` sur `/<slug>/`. Pas de `npm install`,
-pas de build. Lancer avec `npm start`. `server.js` est un amorceur qui recharge
+pas de build : les pages sont des vues Twig dans `views/`, rendues par twig.js
+embarqué dans `vendor/twig.cjs` ; leurs fichiers (CSS…) sont dans `public/`,
+servis sous `/_hub/`. Lancer avec `npm start`. `server.js` est un amorceur qui recharge
 `hub.js` à chaud (Infomaniak ne permet pas de redémarrer l'application autrement
 que depuis le Manager) : le code du hub va dans `hub.js`, `server.js` ne change pas.
 

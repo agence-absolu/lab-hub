@@ -2,12 +2,17 @@
 
 Hub des démonstrations techniques publiées sur **lab.agence-absolu.com**.
 
-Deux fichiers, sans dépendance : ni `npm install`, ni build.
+Sans rien à installer : ni `npm install`, ni build.
 
 - `hub.js` — le hub lui-même : liste les démos en ligne sur `/` et sert chacune
   d'elles sur `/<slug>/` ;
 - `server.js` — l'amorceur : ouvre le port, délègue chaque requête à `hub.js`
-  et le réimporte dès qu'une nouvelle version est déposée sur le disque.
+  et le réimporte dès qu'une nouvelle version est déposée sur le disque ;
+- `views/` — les pages du hub, en Twig (`layout.twig` et une vue par page) ;
+- `public/` — les fichiers du hub (`hub.css`…), servis sous `/_hub/` ;
+- `vendor/twig.cjs` — [twig.js](https://github.com/twigjs/twig.js) 3.0.0, le
+  build autonome du paquet npm, embarqué tel quel (licence BSD-2-Clause) pour
+  ne pas dépendre d'un `npm install` sur le serveur.
 
 ```bash
 npm start            # http://localhost:3000
@@ -45,15 +50,33 @@ Règles imposées par `hub.js` :
 **Le déploiement du hub ne doit jamais toucher à `lab-projects/`** — une
 exclusion s'il passe par `rsync --delete`.
 
+### Les vues
+
+Les pages sont rendues par twig.js depuis `views/`. Chaque vue est enregistrée
+sous son nom de fichier (`{% extends 'layout.twig' %}`), avec l'auto-échappement
+activé. Une vue modifiée sur le disque est relue à la requête suivante, sans
+toucher à `hub.js`. Les listes sont triées par date de dernière modification
+(celle du fichier le plus récent de la démo), la plus récente en tête.
+
+Les fichiers de `public/` sont servis sous `/_hub/` (`/_hub/hub.css`) : le
+souligné n'est pas admis dans un slug, aucune démo ne peut prendre ce chemin.
+Ils sont revalidés à chaque visite (ETag), pas figés en cache.
+
+twig.js couvre l'essentiel de Twig, pas tout (quelques filtres et fonctions
+manquent, pas de `{% use %}`) ; le filtre `date` ignore le fuseau, les dates
+sont donc formatées côté `hub.js`, en heure de Paris.
+
 Variables d'environnement : `PORT` (défaut `3000`), `LAB_PROJECTS_DIR` (défaut
 `./lab-projects`).
 
 ## Déployer le hub
 
-`.github/workflows/deploy.yml` envoie `hub.js`, `server.js`, `package.json` et ce
-README par rsync sur SSH dans `~/lab.agence-absolu.com/` à chaque push sur `main`
-(ou à la demande, onglet Actions), avec les mêmes quatre secrets que les démos
-(voir plus bas). Sans `--delete` : `lab-projects/` n'est jamais touché.
+`.github/workflows/deploy.yml` envoie `public/`, `vendor/`, `views/`, puis `hub.js`,
+`server.js`, `package.json` et ce README par rsync sur SSH dans
+`~/lab.agence-absolu.com/` à chaque push sur `main` (ou à la demande, onglet
+Actions), avec les mêmes quatre secrets que les démos (voir plus bas). Sans
+`--delete` : `lab-projects/` n'est jamais touché. Les vues et la bibliothèque
+partent en premier : `hub.js` est rechargé dès son arrivée et doit les trouver.
 
 **Pas de redémarrage** : `server.js` sonde `hub.js` toutes les deux secondes et
 le réimporte dès que rsync en dépose une nouvelle version — le nouveau code

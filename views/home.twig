@@ -1,0 +1,19 @@
+{# Page d'accueil : les démos en ligne, la plus récente en tête. #}
+{% extends 'layout.twig' %}
+
+{% block content %}
+  <h1>Absolu Lab</h1>
+  <p>Démonstrations techniques.</p>
+  <ul>
+    {% for project in projects %}
+      <li>
+        <a href="/{{ project.slug }}/">{{ project.slug }}</a>
+        {% if project.modified %}
+          <time datetime="{{ project.modified.iso }}"> - {{ project.modified.label }}</time>
+        {% endif %}
+      </li>
+    {% else %}
+      <li>Aucune démo publiée pour l’instant.</li>
+    {% endfor %}
+  </ul>
+{% endblock %}

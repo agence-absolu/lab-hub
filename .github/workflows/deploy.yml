@@ -61,4 +61,8 @@ jobs:
           sshpass -e ssh "$USER_SSH@$HOST" "mkdir -p '$TARGET'"
           # Liste explicite, pas de --delete : rien d'autre dans ce dossier
           # (lab-projects/ en tête) ne doit être touché.
+          #
+          # Les vues et la bibliothèque embarquée partent avant hub.js : server.js
+          # le recharge dès qu'il change, et il doit trouver ce dont il dépend.
+          sshpass -e rsync -az public vendor views "$USER_SSH@$HOST:$TARGET/"
           sshpass -e rsync -az hub.js server.js package.json README.md "$USER_SSH@$HOST:$TARGET/"
