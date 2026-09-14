@@ -7,7 +7,7 @@
   <ul>
     {% for project in projects %}
       <li>
-        <a href="/{{ project.slug }}/">{{ project.slug }}</a>
+        <a href="/{{ project.slug }}/" target="_blank" rel="noopener">{{ project.slug }}</a>
         {% if project.modified %}
           <time datetime="{{ project.modified.iso }}"> - {{ project.modified.label }}</time>
         {% endif %}
