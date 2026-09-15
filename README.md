@@ -107,23 +107,19 @@ l'organisation `agence-absolu`.
 
 ```bash
 npm create @absolu/lab-project@latest
+# ou, directement :
+npm create @absolu/lab-project@latest -- ma-demo
 ```
 
-Le générateur pose trois questions — slug, titre, description — puis crée le
-dossier `./<slug>/`. Sans question, tout se passe en arguments :
-
-```bash
-npm create @absolu/lab-project@latest -- ma-demo --title "Ma démo" -d "Ce qu'elle montre" --yes
-```
+Une seule question, le slug, s'il n'est pas passé en argument (hors d'un
+terminal interactif, en CI, il est requis). Le projet est créé dans `./<slug>/`.
 
 | Option | Rôle |
 | --- | --- |
 | `[slug]` | nom npm du projet, donc l'URL finale `/<slug>/` |
-| `--title <texte>` | titre de la démo (défaut : « Ma démo ») |
-| `-d, --description <texte>` | description (balise `meta` et README) |
 | `--dir <dossier>` | dossier de destination (défaut : `./<slug>`) |
 | `--no-git` | ne pas initialiser de dépôt git |
-| `-y, --yes` | accepter les valeurs par défaut sans poser de question |
+| `-h, --help` | l'aide |
 
 Le **slug** est le nom npm du projet (`"name"` dans `package.json`). Il doit
 respecter le format imposé par le hub — minuscules, chiffres, tirets
@@ -136,10 +132,15 @@ Le projet généré contient tout ce que le hub attend :
   `BASE_PATH` la surcharge au besoin (`BASE_PATH=/` pour une racine de domaine) ;
 - `.github/workflows/deploy.yml` — compile et publie `dist/` sur le lab (voir
   plus bas) ;
-- `index.html`, `src/main.js`, `src/style.css` — une page minimale (titre,
-  description), sans dépendance autre que Vite ;
+- `index.html`, `src/main.js`, `src/style.css` — une page minimale, sans
+  dépendance autre que Vite ;
 - `README.md` et `CLAUDE.md` — rappellent les règles du hub et le déploiement ;
 - `.gitignore` et un dépôt git initialisé, sans commit.
+
+Le titre (« Démo Lab Absolu ») et la description (« Une démo de plus dans
+l'univers du Lab Absolu. ») sont les mêmes pour toutes les démos : première
+chose à faire, les remplacer dans `index.html`, `README.md`, `CLAUDE.md` et
+`package.json`.
 
 ### 2. Développer
 
