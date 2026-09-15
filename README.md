@@ -94,46 +94,83 @@ fait pour ne plus changer.
 ## Ajouter une démo
 
 Le hub ne bouge pas, aucune configuration serveur n'est touchée. Une démo est un
-projet Vite autonome, dans son propre dépôt, qui se publie tout seul dans
-`lab-projects/<slug>/` à chaque push sur `main`. Le modèle est
-[`lab-drill`](https://github.com/agence-absolu/lab-drill).
+projet Vite autonome, dans son propre dépôt GitHub, qui se publie tout seul dans
+`lab-projects/<slug>/` à chaque push sur `main`. Le générateur
+[`@absolu/create-lab-project`](https://github.com/agence-absolu/create-lab-project)
+([npm](https://www.npmjs.com/package/@absolu/create-lab-project)) produit ce
+projet en une commande.
 
-### 1. Le projet
+Prérequis : Node ≥ 22, `git`, et [`gh`](https://cli.github.com/) connecté à
+l'organisation `agence-absolu`.
 
-Le **slug** est le nom npm du projet (`"name"` dans `package.json`). Il doit
-respecter le format ci-dessus ; c'est lui qui donne l'URL finale.
+### 1. Générer le projet
 
-`vite.config.js` en déduit la base des chemins — rien à nommer dans le fichier,
-il se recopie tel quel :
-
-```js
-import { readFileSync } from 'node:fs';
-import { defineConfig } from 'vite';
-
-// Servi depuis lab.agence-absolu.com/<slug>/ ; le slug est le nom npm.
-// BASE_PATH surcharge au besoin (racine de domaine : BASE_PATH=/).
-const { name } = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
-
-export default defineConfig({
-  base: process.env.BASE_PATH || `/${name}/`,
-});
+```bash
+npm create @absolu/lab-project@latest
 ```
 
-### 2. Le workflow
+Le générateur pose trois questions — slug, titre, description — puis crée le
+dossier `./<slug>/`. Sans question, tout se passe en arguments :
 
-Recopier `.github/workflows/deploy.yml` de `lab-drill` sans le modifier. Il :
+```bash
+npm create @absolu/lab-project@latest -- ma-demo --title "Ma démo" -d "Ce qu'elle montre" --yes
+```
 
-1. lit le slug dans `package.json` ;
-2. `npm ci` puis `npm run build` avec `BASE_PATH=/<slug>/` ;
-3. envoie `dist/` par **rsync sur SSH** (mot de passe via `sshpass`) dans
-   `lab.agence-absolu.com/lab-projects/<slug>/`, avec `--delete` pour purger
-   les bundles de la version précédente.
+| Option | Rôle |
+| --- | --- |
+| `[slug]` | nom npm du projet, donc l'URL finale `/<slug>/` |
+| `--title <texte>` | titre de la démo (défaut : « Ma démo ») |
+| `-d, --description <texte>` | description (balise `meta` et README) |
+| `--dir <dossier>` | dossier de destination (défaut : `./<slug>`) |
+| `--no-git` | ne pas initialiser de dépôt git |
+| `-y, --yes` | accepter les valeurs par défaut sans poser de question |
 
-Il se déclenche à chaque push sur `main` et à la demande depuis l'onglet Actions.
+Le **slug** est le nom npm du projet (`"name"` dans `package.json`). Il doit
+respecter le format imposé par le hub — minuscules, chiffres, tirets
+(`/^[a-z0-9][a-z0-9-]*$/`) — et c'est lui, seul, qui donne l'URL : rien n'est à
+nommer ailleurs.
 
-### 3. Les secrets
+Le projet généré contient tout ce que le hub attend :
 
-Dans le dépôt GitHub, Settings › Secrets and variables › Actions :
+- `vite.config.js` — déduit la base des chemins (`/<slug>/`) du nom npm ;
+  `BASE_PATH` la surcharge au besoin (`BASE_PATH=/` pour une racine de domaine) ;
+- `.github/workflows/deploy.yml` — compile et publie `dist/` sur le lab (voir
+  plus bas) ;
+- `index.html`, `src/main.js`, `src/style.css` — une page minimale (titre,
+  description), sans dépendance autre que Vite ;
+- `README.md` et `CLAUDE.md` — rappellent les règles du hub et le déploiement ;
+- `.gitignore` et un dépôt git initialisé, sans commit.
+
+### 2. Développer
+
+```bash
+cd <slug>
+npm install
+npm run dev       # http://localhost:5173/<slug>/
+npm run build     # compile dans dist/
+npm run preview   # prévisualise dist/ sur le même sous-chemin
+```
+
+Le serveur de développement sert déjà la démo sous `/<slug>/`, comme en
+production : les chemins absolus se vérifient en local.
+
+### 3. Créer le dépôt
+
+```bash
+git add -A && git commit -m "Initialiser la démo"
+gh repo create agence-absolu/lab-<slug> --public --source=. --push
+```
+
+**Public, obligatoirement** : les secrets SSH sont définis au niveau de
+l'organisation `agence-absolu`, et GitHub ne les partage qu'avec les dépôts
+publics (limite du plan gratuit). Un dépôt privé verrait son workflow échouer
+faute de secrets.
+
+### 4. Les secrets
+
+Rien à créer dans le dépôt : le workflow lit les secrets de l'organisation
+(Settings de l'organisation › Secrets and variables › Actions). Ce sont les
+mêmes que pour le hub :
 
 | Secret | Contenu |
 | --- | --- |
@@ -142,25 +179,34 @@ Dans le dépôt GitHub, Settings › Secrets and variables › Actions :
 | `LAB_SSH_PASSWORD` | mot de passe |
 | `LAB_SSH_KNOWN_HOSTS` | facultatif — sortie de `ssh-keyscan <hôte>`, pour épingler l'empreinte du serveur |
 
+Sans le dernier, le workflow relève l'empreinte du serveur au premier contact et
+la croit sur parole. Un secret de dépôt du même nom, s'il en existe un, prime
+sur celui de l'organisation.
+
 Pourquoi un mot de passe et pas une clé : chez Infomaniak, l'authentification par
 clé n'est pas disponible sur un site Node.js et le port FTP est filtré. Le jour
 où la clé sera possible, `sshpass -e` se remplace par une clé déployée.
 
-### 4. Pousser
+### 5. Pousser, c'est publier
 
-Premier push sur `main` : le workflow compile, envoie, et la démo apparaît sur
-la page d'accueil du lab. Rien d'autre à faire.
+Le push initial (celui de `gh repo create --push`) déclenche déjà le workflow ;
+chaque push suivant sur `main` le relance, et l'onglet Actions permet de le
+lancer à la demande. Il :
 
-En local :
+1. lit le slug dans `package.json` ;
+2. `npm ci` puis `npm run build` avec `BASE_PATH=/<slug>/` ;
+3. envoie `dist/` par **rsync sur SSH** (mot de passe via `sshpass`) dans
+   `lab.agence-absolu.com/lab-projects/<slug>/`, avec `--delete` pour purger
+   les bundles de la version précédente — les noms étant empreintés, les
+   nouveaux fichiers sont en place avant le retrait des anciens.
 
-```bash
-npm run dev       # http://localhost:5173/<slug>/
-npm run build     # compile dans dist/
-npm run preview   # prévisualise dist/ sur le même sous-chemin
-```
+Un push plus récent annule le déploiement en cours (`concurrency`). Une fois
+le workflow terminé, la démo répond sur `https://lab.agence-absolu.com/<slug>/`
+et apparaît en tête de la page d'accueil du lab : le hub liste ce qui est dans
+`lab-projects/`, il n'y a rien à lui déclarer.
 
-## À venir
+### Retirer une démo
 
-Les étapes 1 à 3 sont du copier-coller : un générateur `npm create absolu-lab`
-(dépôt `create-absolu-lab`) devrait initialiser un projet Vite avec le
-`vite.config.js`, le workflow et un `README` rappelant les secrets à créer.
+Le hub n'a pas de commande pour ça : supprimer `lab-projects/<slug>/` sur le
+serveur (en SSH) suffit, la page d'accueil s'ajuste à la visite suivante.
+Archiver ou supprimer le dépôt GitHub évite qu'un push la republie.
