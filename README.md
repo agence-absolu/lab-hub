@@ -206,6 +206,23 @@ le workflow terminé, la démo répond sur `https://lab.agence-absolu.com/<slug>
 et apparaît en tête de la page d'accueil du lab : le hub liste ce qui est dans
 `lab-projects/`, il n'y a rien à lui déclarer.
 
+### Protéger une démo par mot de passe
+
+Facultatif, démo par démo. Si `lab-projects/<slug>/.access` existe, le hub
+demande identifiant (libre) et mot de passe (authentification HTTP Basic)
+avant de servir quoi que ce soit de la démo — page, scripts, images, modèles ;
+ses fichiers sont alors servis en cache `private`. Sans ce fichier, rien ne
+change.
+
+`.access` tient sur une ligne, `scrypt$<sel>$<empreinte>` en base64 : le mot de
+passe n'est jamais sur le disque, et le fichier, caché, n'est jamais servi. Le
+workflow d'une démo générée récemment l'écrit lui-même à partir du secret de
+dépôt `LAB_PAGE_PASSWORD` ; pour une démo plus ancienne, reprendre l'étape
+« Accès protégé » de son `deploy.yml`.
+
+Le dépôt de la démo reste public : son code et ses visuels restent lisibles sur
+GitHub. La protection porte sur la page en ligne, pas sur les sources.
+
 ### Retirer une démo
 
 Le hub n'a pas de commande pour ça : supprimer `lab-projects/<slug>/` sur le

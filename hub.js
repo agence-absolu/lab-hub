@@ -11,11 +11,13 @@
 // jour où le vrai hub prendra la place, il reprendra la même convention de
 // dossiers.
 
+import { createHash, scrypt, timingSafeEqual } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const VIEWS = path.join(ROOT, 'views');
@@ -144,6 +146,58 @@ async function home(res) {
   await render(res, 'home.twig', { projects });
 }
 
+// --- L'accès protégé ---------------------------------------------------------
+// Une démo se protège par mot de passe en déposant lab-projects/<slug>/.access :
+// une ligne « scrypt$<sel>$<empreinte> » (base64), écrite par son déploiement à
+// partir d'un secret GitHub. Le mot de passe lui-même n'est jamais sur le
+// disque, et le fichier, caché, n'est jamais servi. Sans ce fichier, la démo
+// reste ouverte : rien ne change pour les autres.
+//
+// Authentification HTTP Basic : le navigateur la mémorise pour la session et
+// la renvoie avec chaque fichier (scripts, images, modèles), tous protégés.
+// L'identifiant est ignoré, seul le mot de passe compte.
+const scryptAsync = promisify(scrypt);
+
+// Accès déjà vérifiés : scrypt est volontairement lent, une page charge des
+// dizaines de fichiers. Clé : empreinte du couple (fichier .access, en-tête).
+const granted = new Set();
+
+async function readAccess(slug) {
+  return readFile(path.join(PROJECTS, slug, '.access'), 'utf8').catch(() => null);
+}
+
+async function isAuthorized(req, access) {
+  const header = req.headers.authorization || '';
+  const credentials = /^Basic\s+(.+)$/i.exec(header);
+  if (!credentials) return false;
+
+  const key = createHash('sha256').update(access).update('\0').update(header).digest('hex');
+  if (granted.has(key)) return true;
+
+  // Fichier mal formé : on refuse plutôt que d'ouvrir la démo.
+  const [algo, salt, hash] = access.trim().split('$');
+  if (algo !== 'scrypt' || !salt || !hash) return false;
+
+  const decoded = Buffer.from(credentials[1], 'base64').toString('utf8');
+  const password = decoded.slice(decoded.indexOf(':') + 1);
+  const expected = Buffer.from(hash, 'base64');
+  const actual = await scryptAsync(password, Buffer.from(salt, 'base64'), expected.length);
+  if (!timingSafeEqual(actual, expected)) return false;
+
+  if (granted.size > 500) granted.clear();
+  granted.add(key);
+  return true;
+}
+
+function askPassword(res, slug) {
+  res.writeHead(401, {
+    'WWW-Authenticate': `Basic realm="${slug}", charset="UTF-8"`,
+    'Content-Type': 'text/plain; charset=utf-8',
+    'Cache-Control': 'no-store',
+  });
+  res.end('Démo protégée par mot de passe.');
+}
+
 // --- Les démos ---------------------------------------------------------------
 async function serveProject(req, res, pathname) {
   const match = DEMO.exec(pathname);
@@ -151,6 +205,13 @@ async function serveProject(req, res, pathname) {
 
   // Ni fichier ni dossier caché : un .git ou un .env égaré reste invisible.
   if (pathname.split('/').some((segment) => segment.startsWith('.'))) return false;
+
+  // Démo protégée : rien n'est servi sans le mot de passe, pas même un 404.
+  const access = await readAccess(match[1]);
+  if (access !== null && !(await isAuthorized(req, access))) {
+    askPassword(res, match[1]);
+    return true;
+  }
 
   // Le chemin est reconstruit depuis lab-projects/ puis vérifié : même encodé, un
   // « .. » ne peut pas désigner un fichier hors des démos — le code du hub,
@@ -180,7 +241,7 @@ async function serveProject(req, res, pathname) {
   // Les fichiers de assets/ portent une empreinte dans leur nom et peuvent
   // être figés ; index.html nomme les bundles de la version courante, il doit
   // donc être revalidé à chaque visite.
-  sendFile(req, res, file, info, !file.endsWith('.html'));
+  sendFile(req, res, file, info, !file.endsWith('.html'), access !== null);
   return true;
 }
 
@@ -200,8 +261,9 @@ async function servePublic(req, res, pathname) {
   return true;
 }
 
-// Envoie un fichier avec ETag ; `immutable` le fige un an dans les caches.
-function sendFile(req, res, file, info, immutable) {
+// Envoie un fichier avec ETag ; `immutable` le fige un an dans les caches ;
+// `restricted` (démo protégée) l'écarte des caches partagés.
+function sendFile(req, res, file, info, immutable, restricted = false) {
   const etag = `W/"${info.size.toString(16)}-${info.mtimeMs.toString(16)}"`;
 
   if (req.headers['if-none-match'] === etag) {
@@ -213,7 +275,9 @@ function sendFile(req, res, file, info, immutable) {
     'Content-Type': TYPES[path.extname(file)] || 'application/octet-stream',
     'Content-Length': info.size,
     ETag: etag,
-    'Cache-Control': immutable ? 'public, max-age=31536000, immutable' : 'no-cache, must-revalidate',
+    'Cache-Control':
+      (restricted ? 'private, ' : immutable ? 'public, ' : '') +
+      (immutable ? 'max-age=31536000, immutable' : 'no-cache, must-revalidate'),
   });
 
   if (req.method === 'HEAD') return void res.end();
